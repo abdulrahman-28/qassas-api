@@ -22,10 +22,6 @@ from peft import PeftModel
 from metrics_factory import MetricsFactory
 from config import CATEGORIES, FEATURES
 
-MODEL_DIR = os.environ.get(
-    "MODEL_DIR_OVERRIDE",
-    os.path.join(BASE_DIR, '..', 'model', 'trained_models', 'model_all')
-)
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 state = {}
@@ -33,6 +29,10 @@ state = {}
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    MODEL_DIR = os.environ.get(
+        "MODEL_DIR_OVERRIDE",
+        os.path.join(BASE_DIR, '..', 'model', 'trained_models', 'model_all')
+    )
     print(f"Loading model from {MODEL_DIR} on {DEVICE}...")
 
     with open(os.path.join(MODEL_DIR, 'model_config.json')) as f:
