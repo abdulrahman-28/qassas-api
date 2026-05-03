@@ -61,9 +61,10 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Qassas Anomaly Detection API", lifespan=lifespan)
 
+_allow_origin = os.environ.get("ALLOW_ORIGIN", "http://localhost:3000")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=[_allow_origin],
     allow_methods=["*"],
     allow_headers=["*"],
 )
