@@ -2,7 +2,8 @@ import sys
 import os
 
 # Allow importing from the model/ directory
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'model'))
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(BASE_DIR, '..', 'model'))
 
 import json
 import base64
@@ -22,7 +23,7 @@ from peft import PeftModel
 from metrics_factory import MetricsFactory
 from config import CATEGORIES, FEATURES
 
-MODEL_DIR = os.path.join(os.path.dirname(__file__), '..', 'model', 'trained_models', 'model_all')
+MODEL_DIR = os.path.join(BASE_DIR, '..', 'model', 'trained_models', 'model_all')
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 state = {}
@@ -95,11 +96,14 @@ def health():
 
 @app.post("/predict")
 async def predict(file: UploadFile = File(...)):
-    if not file.content_type.startswith("image/"):
+    if not file.content_type or not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="File must be an image.")
 
     contents = await file.read()
-    img = Image.open(BytesIO(contents)).convert("RGB")
+    try:
+        img = Image.open(BytesIO(contents)).convert("RGB")
+    except Exception:
+        raise HTTPException(status_code=400, detail="Could not read image file.")
     img_512 = img.resize((512, 512))
 
     prompt = "a high quality photo of a perfect product"
