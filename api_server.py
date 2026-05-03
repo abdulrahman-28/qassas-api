@@ -40,7 +40,6 @@ async def lifespan(app: FastAPI):
         "runwayml/stable-diffusion-v1-5",
         torch_dtype=torch.float16,
         safety_checker=None,
-        local_files_only=True,
     ).to(DEVICE)
     pipe.unet = PeftModel.from_pretrained(pipe.unet, MODEL_DIR)
     pipe.set_progress_bar_config(disable=True)
