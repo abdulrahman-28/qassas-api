@@ -130,9 +130,10 @@ async def predict(file: UploadFile = File(...)):
     print(f"[4/5] Metrics: {scores}")
 
     print(f"[5/5] Running Isolation Forest...")
-    anomaly_score = float(-state['iforest'].decision_function(feat)[0])
-    is_anomalous = anomaly_score >= state['threshold']
-    print(f"[5/5] Score: {anomaly_score:.4f} | Threshold: {state['threshold']:.4f} | Anomalous: {is_anomalous}")
+    raw_score = float(state['iforest'].decision_function(feat)[0])
+    anomaly_score = -raw_score  # positive = more anomalous
+    is_anomalous = raw_score <= state['threshold']
+    print(f"[5/5] Raw: {raw_score:.4f} | Threshold: {state['threshold']:.4f} | Score: {anomaly_score:.4f} | Anomalous: {is_anomalous}")
 
     heatmap_img = create_anomaly_map(img_512, recon)
 
