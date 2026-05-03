@@ -139,7 +139,8 @@ async def predict(file: UploadFile = File(...)):
 
     return {
         "is_anomalous": bool(is_anomalous),
-        "score": anomaly_score,
+        "score": float(anomaly_score),
+        "threshold": float(-state['threshold']),  # anomaly_score space: score >= this → anomalous
         "heatmap": image_to_base64(heatmap_img),
         "reconstructed": image_to_base64(recon),
     }
