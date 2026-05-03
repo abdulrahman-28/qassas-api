@@ -23,7 +23,10 @@ from peft import PeftModel
 from metrics_factory import MetricsFactory
 from config import CATEGORIES, FEATURES
 
-MODEL_DIR = os.path.join(BASE_DIR, '..', 'model', 'trained_models', 'model_all')
+MODEL_DIR = os.environ.get(
+    "MODEL_DIR_OVERRIDE",
+    os.path.join(BASE_DIR, '..', 'model', 'trained_models', 'model_all')
+)
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 state = {}
@@ -99,14 +102,17 @@ async def predict(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail="File must be an image.")
 
     contents = await file.read()
+    print(f"[1/5] Image received ({len(contents)} bytes)")
     try:
         img = Image.open(BytesIO(contents)).convert("RGB")
     except Exception:
         raise HTTPException(status_code=400, detail="Could not read image file.")
     img_512 = img.resize((512, 512))
+    print(f"[2/5] Image loaded and resized to 512x512")
 
     prompt = "a high quality photo of a perfect product"
 
+    print(f"[3/5] Running diffusion reconstruction on {DEVICE}... (this is the slow step)")
     with torch.no_grad():
         recon = state['pipe'](
             prompt=prompt,
@@ -116,12 +122,17 @@ async def predict(file: UploadFile = File(...)):
             num_inference_steps=30,
             generator=torch.Generator(device=DEVICE).manual_seed(999),
         ).images[0]
+    print(f"[3/5] Reconstruction done")
 
+    print(f"[4/5] Computing metrics...")
     scores = state['metrics'].calculate_metrics(img_512, recon)
     feat = np.array([[scores[f] for f in FEATURES]])
+    print(f"[4/5] Metrics: {scores}")
 
+    print(f"[5/5] Running Isolation Forest...")
     anomaly_score = float(-state['iforest'].decision_function(feat)[0])
     is_anomalous = anomaly_score >= state['threshold']
+    print(f"[5/5] Score: {anomaly_score:.4f} | Threshold: {state['threshold']:.4f} | Anomalous: {is_anomalous}")
 
     heatmap_img = create_anomaly_map(img_512, recon)
 
