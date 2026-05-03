@@ -1,9 +1,8 @@
 import sys
 import os
 
-# Allow importing from the model/ directory
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(BASE_DIR, '..', 'model'))
+sys.path.insert(0, BASE_DIR)
 
 import json
 import base64
