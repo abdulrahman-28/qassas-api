@@ -13,7 +13,7 @@ import torch
 from io import BytesIO
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi import FastAPI, File, Form, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from PIL import Image
 from diffusers import StableDiffusionImg2ImgPipeline
@@ -97,12 +97,19 @@ def health():
 
 
 @app.post("/predict")
-async def predict(file: UploadFile = File(...)):
+async def predict(
+    file: UploadFile = File(...),
+    product_type: str = Form(default="all"),
+):
     if not file.content_type or not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="File must be an image.")
 
+    category = CATEGORIES.get(product_type.lower(), CATEGORIES["all"])
+    strength = category["strength"]
+    guidance = category["guidance"]
+
     contents = await file.read()
-    print(f"[1/5] Image received ({len(contents)} bytes)")
+    print(f"[1/5] Image received ({len(contents)} bytes), product_type={product_type}")
     try:
         img = Image.open(BytesIO(contents)).convert("RGB")
     except Exception:
@@ -112,13 +119,13 @@ async def predict(file: UploadFile = File(...)):
 
     prompt = "a high quality photo of a perfect product"
 
-    print(f"[3/5] Running diffusion reconstruction on {DEVICE}... (this is the slow step)")
+    print(f"[3/5] Running diffusion reconstruction on {DEVICE}... (strength={strength}, guidance={guidance})")
     with torch.no_grad():
         recon = state['pipe'](
             prompt=prompt,
             image=img_512,
-            strength=state['strength'],
-            guidance_scale=state['guidance'],
+            strength=strength,
+            guidance_scale=guidance,
             num_inference_steps=30,
             generator=torch.Generator(device=DEVICE).manual_seed(999),
         ).images[0]
@@ -129,18 +136,27 @@ async def predict(file: UploadFile = File(...)):
     feat = np.array([[scores[f] for f in FEATURES]])
     print(f"[4/5] Metrics: {scores}")
 
+    # Compute defect coverage from the pixel-level diff
+    orig_np = np.array(img_512).astype(np.float32)
+    recon_np = np.array(recon).astype(np.float32)
+    diff_gray = np.mean(np.abs(orig_np - recon_np), axis=2)
+    diff_max = diff_gray.max()
+    coverage = float((diff_gray > diff_max * 0.3).sum() / diff_gray.size * 100) if diff_max > 0 else 0.0
+
     print(f"[5/5] Running Isolation Forest...")
     raw_score = float(state['iforest'].decision_function(feat)[0])
     anomaly_score = -raw_score  # positive = more anomalous
     is_anomalous = raw_score <= state['threshold']
-    print(f"[5/5] Raw: {raw_score:.4f} | Threshold: {state['threshold']:.4f} | Score: {anomaly_score:.4f} | Anomalous: {is_anomalous}")
+    print(f"[5/5] Raw: {raw_score:.4f} | Threshold: {state['threshold']:.4f} | Score: {anomaly_score:.4f} | Anomalous: {is_anomalous} | Coverage: {coverage:.1f}%")
 
     heatmap_img = create_anomaly_map(img_512, recon)
 
     return {
         "is_anomalous": bool(is_anomalous),
         "score": float(anomaly_score),
-        "threshold": float(-state['threshold']),  # anomaly_score space: score >= this → anomalous
+        "threshold": float(-state['threshold']),
+        "coverage": round(coverage, 2),
+        "metrics": {f: float(scores[f]) for f in FEATURES},
         "heatmap": image_to_base64(heatmap_img),
         "reconstructed": image_to_base64(recon),
     }
