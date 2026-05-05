@@ -194,8 +194,9 @@ async def predict(
     print(f"[5/5] Running Isolation Forest...")
     raw_score = float(state['iforest'].decision_function(feat)[0])
     anomaly_score = -raw_score
-    # Match reference: is_anomaly = score >= threshold (both in negated space)
-    is_anomalous = anomaly_score >= state['threshold']
+    # optimal_threshold is stored in raw IF score space (negative = anomalous).
+    # Anomalous when raw_score <= threshold; equivalently anomaly_score >= -threshold.
+    is_anomalous = raw_score <= state['threshold']
     print(f"[5/5] Raw: {raw_score:.4f} | Threshold: {state['threshold']:.4f} | "
           f"Score: {anomaly_score:.4f} | Anomalous: {is_anomalous} | Coverage: {coverage:.1f}%")
 
@@ -204,7 +205,8 @@ async def predict(
     return {
         "is_anomalous": bool(is_anomalous),
         "score": float(anomaly_score),
-        "threshold": float(state['threshold']),
+        # Negate so the web app can use: anomaly_score > threshold (both positive-is-anomalous)
+        "threshold": float(-state['threshold']),
         "coverage": round(coverage, 2),
         "metrics": {f: float(scores[f]) for f in FEATURES},
         "heatmap": image_to_base64(heatmap_img),
